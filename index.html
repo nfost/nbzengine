@@ -15,17 +15,23 @@
             border: none;
         }
 
-        .loading-overlay {
-            display: none;
+        .status-indicator {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(255, 255, 255, 0.8);
-            justify-content: center;
-            align-items: center;
+            bottom: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: white;
             z-index: 1000;
+        }
+
+        .status-active {
+            background-color: #4CAF50;
+        }
+
+        .status-inactive {
+            background-color: #f44336;
         }
     </style>
 </head>
@@ -37,26 +43,100 @@
             allowfullscreen
         ></iframe>
     </div>
+    <div id="status" class="status-indicator status-active">Active</div>
 
     <script>
         const createShinyWrapper = () => {
             let lastVisibleTime = Date.now();
             let shinyFrame = null;
+            let keepAliveInterval = null;
+            let reconnectAttempts = 0;
+            const MAX_RECONNECT_ATTEMPTS = 3;
+            const PING_INTERVAL = 30000; // 30 seconds
+            const statusIndicator = document.getElementById('status');
+
+            const updateStatus = (isActive) => {
+                statusIndicator.className = `status-indicator status-${isActive ? 'active' : 'inactive'}`;
+                statusIndicator.textContent = isActive ? 'Active' : 'Reconnecting...';
+            };
+
+            const pingShiny = () => {
+                try {
+                    if (shinyFrame && shinyFrame.contentWindow) {
+                        // Try to access the iframe to keep it alive
+                        shinyFrame.contentWindow.postMessage('ping', '*');
+                        updateStatus(true);
+                    }
+                } catch (e) {
+                    console.log('Ping failed:', e);
+                    updateStatus(false);
+                }
+            };
+
+            const reloadFrame = () => {
+                if (shinyFrame && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    console.log('Reloading frame...');
+                    shinyFrame.src = shinyFrame.src;
+                    reconnectAttempts++;
+                }
+            };
+
+            const startKeepAlive = () => {
+                if (keepAliveInterval) {
+                    clearInterval(keepAliveInterval);
+                }
+                keepAliveInterval = setInterval(pingShiny, PING_INTERVAL);
+                reconnectAttempts = 0;
+            };
+
+            const stopKeepAlive = () => {
+                if (keepAliveInterval) {
+                    clearInterval(keepAliveInterval);
+                    keepAliveInterval = null;
+                }
+            };
 
             const setupShinyFrame = () => {
                 shinyFrame = document.querySelector('#shiny-frame');
                 
+                // Handle visibility changes
                 document.addEventListener('visibilitychange', () => {
                     if (document.visibilityState === 'visible') {
                         const timeDiff = Date.now() - lastVisibleTime;
+                        console.log('Page visible, time away:', timeDiff);
                         
-                        if (timeDiff > 300000) {
-                            if (shinyFrame) {
-                                shinyFrame.src = shinyFrame.src;
-                            }
+                        if (timeDiff > 60000) { // 1 minute
+                            reloadFrame();
                         }
+                        startKeepAlive();
                     } else {
                         lastVisibleTime = Date.now();
+                        stopKeepAlive();
+                    }
+                });
+
+                // Handle page focus/blur
+                window.addEventListener('focus', () => {
+                    startKeepAlive();
+                });
+
+                window.addEventListener('blur', () => {
+                    stopKeepAlive();
+                });
+
+                // Handle page before unload
+                window.addEventListener('beforeunload', () => {
+                    stopKeepAlive();
+                });
+
+                // Start initial keep-alive
+                startKeepAlive();
+
+                // Listen for messages from Shiny
+                window.addEventListener('message', (event) => {
+                    // Add origin check if needed
+                    if (event.data === 'pong') {
+                        updateStatus(true);
                     }
                 });
             };
@@ -66,9 +146,18 @@
             };
         };
 
+        // Initialize when document is ready
         document.addEventListener('DOMContentLoaded', () => {
             const shinyWrapper = createShinyWrapper();
             shinyWrapper.init();
+        });
+
+        // Attempt to reload on online/offline events
+        window.addEventListener('online', () => {
+            const shinyFrame = document.querySelector('#shiny-frame');
+            if (shinyFrame) {
+                shinyFrame.src = shinyFrame.src;
+            }
         });
     </script>
 </body>
