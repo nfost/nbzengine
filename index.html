@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Shiny App Wrapper</title>
+    <style>
+        .shiny-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+        }
+        
+        #shiny-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.8);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="shiny-wrapper">
+        <iframe 
+            id="shiny-frame"
+            src="https://deltaspread.shinyapps.io/nextbetz_alpha2"
+            allowfullscreen
+        ></iframe>
+    </div>
+
+    <script>
+        const createShinyWrapper = () => {
+            let lastVisibleTime = Date.now();
+            let shinyFrame = null;
+
+            const setupShinyFrame = () => {
+                shinyFrame = document.querySelector('#shiny-frame');
+                
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') {
+                        const timeDiff = Date.now() - lastVisibleTime;
+                        
+                        if (timeDiff > 300000) {
+                            if (shinyFrame) {
+                                shinyFrame.src = shinyFrame.src;
+                            }
+                        }
+                    } else {
+                        lastVisibleTime = Date.now();
+                    }
+                });
+            };
+
+            return {
+                init: setupShinyFrame
+            };
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const shinyWrapper = createShinyWrapper();
+            shinyWrapper.init();
+        });
+    </script>
+</body>
+</html>
